@@ -1,18 +1,114 @@
 <script lang="ts">
+	import { type Message } from '$lib';
+	import type OpenAI from 'openai';
+	import { onMount } from 'svelte';
+
 	let { data } = $props();
 
-	console.log(data);
+	let input = $state('');
+
+	let textarea: HTMLTextAreaElement;
+
+	let messages: Message[] = $state([
+		{ role: 'assistant', content: [{ type: 'text', text: 'Hello! How can I help you?' }] }
+	]);
+
+	let initialHeight: number;
+
+	onMount(() => {
+		initialHeight = textarea.scrollHeight;
+	});
+
+	function sendMessage() {
+		if (!input) return;
+
+		messages = [...messages, { role: 'user', content: [{ type: 'text', text: input }] }];
+		input = '';
+		textarea.style.height = `${initialHeight}px`;
+
+		fetch('/api/sendMessage', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(messages)
+		})
+			.then((res) => res.json())
+			.then((res: OpenAI.Chat.Completions.ChatCompletionMessage) => {
+				messages = [
+					...messages,
+					{
+						role: 'assistant',
+						content: [{ type: 'text', text: res.content ?? 'No contents returned' }]
+					}
+				];
+			});
+	}
+
+	function resizeTextarea() {
+		textarea.style.height = 'auto';
+		textarea.style.height = `${textarea.scrollHeight}px`;
+	}
 </script>
 
 <h1>DestinyChat</h1>
-
-<div class="m-2 flex max-w-md flex-col gap-2 rounded bg-slate-200 p-2">
-	<div class="w-fit rounded bg-slate-300 p-2">asdf</div>
-	<div class="ml-auto w-fit rounded bg-slate-800 p-2 text-white">asdf</div>
-	<div class="flex rounded bg-slate-300 p-2">
-		<input class="w-full bg-slate-1300" />
-		<button class="w-fit rounded bg-slate-800 p-2 text-white">Send</button>
-	</div>
-</div>
-
 {data.count} books
+
+<main class="flex min-h-screen justify-center bg-slate-200">
+	<div class="m-2 flex flex-col gap-2 rounded p-2">
+		{#each messages as message}
+			<div class="flex">
+				{#each message.content as content}
+					{#if message.role === 'assistant'}
+						<div
+							class="w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-300 px-5 py-2"
+						>
+							{content.text}
+						</div>
+					{:else}
+						<div
+							class="ml-auto w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-800 px-5 py-2 text-right text-white"
+						>
+							{content.text}
+						</div>
+					{/if}
+				{/each}
+			</div>
+		{/each}
+		<div class="flex w-full gap-2">
+			<textarea
+				bind:value={input}
+				bind:this={textarea}
+				onkeydown={(event) => {
+					if (event.key !== 'Enter') return;
+					sendMessage();
+				}}
+				oninput={resizeTextarea}
+				class="bg-slate-1300 w-full resize-none rounded-3xl px-5 py-2"
+				rows="1"
+				placeholder="Type a message..."
+			></textarea>
+			<div class="flex items-end">
+				<button
+					onclick={sendMessage}
+					class="w-fit rounded-3xl bg-slate-800 p-1 text-white"
+					aria-label="Send message"
+				>
+					<svg
+						width="32"
+						height="32"
+						viewBox="0 0 32 32"
+						fill="none"
+						xmlns="http://www.w3.org/2000/svg"
+						class="icon-2xl"
+					>
+						<path
+							fill-rule="evenodd"
+							clip-rule="evenodd"
+							d="M15.1918 8.90615C15.6381 8.45983 16.3618 8.45983 16.8081 8.90615L21.9509 14.049C22.3972 14.4953 22.3972 15.2189 21.9509 15.6652C21.5046 16.1116 20.781 16.1116 20.3347 15.6652L17.1428 12.4734V22.2857C17.1428 22.9169 16.6311 23.4286 15.9999 23.4286C15.3688 23.4286 14.8571 22.9169 14.8571 22.2857V12.4734L11.6652 15.6652C11.2189 16.1116 10.4953 16.1116 10.049 15.6652C9.60265 15.2189 9.60265 14.4953 10.049 14.049L15.1918 8.90615Z"
+							fill="currentColor"
+						></path>
+					</svg>
+				</button>
+			</div>
+		</div>
+	</div>
+</main>
