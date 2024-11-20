@@ -2,6 +2,7 @@
 	import { type Message } from '$lib';
 	import type OpenAI from 'openai';
 	import { onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
 
 	let { data } = $props();
 
@@ -13,39 +14,62 @@
 		{ role: 'assistant', content: [{ type: 'text', text: 'Hello! How can I help you?' }] }
 	]);
 
+	let messageSent = false;
+
 	let initialHeight: number;
 
 	onMount(() => {
 		initialHeight = textarea.scrollHeight;
+
+		const storedMessages = localStorage.getItem('messages');
+
+		if (storedMessages) messages = JSON.parse(storedMessages);
 	});
 
-	function sendMessage() {
-		if (!input) return;
+	let awaitingResponse = $state(false);
+
+	async function sendMessage() {
+		if (!input || awaitingResponse) return;
+
+		awaitingResponse = true;
 
 		messages = [...messages, { role: 'user', content: [{ type: 'text', text: input }] }];
 		input = '';
 		textarea.style.height = `${initialHeight}px`;
 
-		fetch('/api/sendMessage', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(messages)
-		})
-			.then((res) => res.json())
-			.then((res: OpenAI.Chat.Completions.ChatCompletionMessage) => {
-				messages = [
-					...messages,
-					{
-						role: 'assistant',
-						content: [{ type: 'text', text: res.content ?? 'No contents returned' }]
-					}
-				];
-			});
+		const json: OpenAI.Chat.Completions.ChatCompletionMessage = await (
+			await fetch('/api/sendMessage', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(messages)
+			})
+		).json();
+
+		messageSent = true;
+
+		messages = [
+			...messages,
+			{
+				role: 'assistant',
+				content: [{ type: 'text', text: json.content ?? 'No contents returned' }]
+			}
+		];
+
+		localStorage.setItem('messages', JSON.stringify(messages));
+
+		awaitingResponse = false;
 	}
 
 	function resizeTextarea() {
 		textarea.style.height = 'auto';
 		textarea.style.height = `${textarea.scrollHeight}px`;
+	}
+
+	function clearChat() {
+		messages = [
+			{ role: 'assistant', content: [{ type: 'text', text: 'Hello! How can I help you?' }] }
+		];
+		localStorage.removeItem('messages');
 	}
 </script>
 
@@ -54,8 +78,9 @@
 
 <main class="flex min-h-screen justify-center bg-slate-200">
 	<div class="m-2 flex flex-col gap-2 rounded p-2">
+		<button onclick={clearChat} class="mx-auto w-fit underline">Clear chat</button>
 		{#each messages as message}
-			<div class="flex">
+			<div class="flex" transition:fade>
 				{#each message.content as content}
 					{#if message.role === 'assistant'}
 						<div
@@ -79,6 +104,9 @@
 				bind:this={textarea}
 				onkeydown={(event) => {
 					if (event.key !== 'Enter') return;
+
+					event.preventDefault();
+
 					sendMessage();
 				}}
 				oninput={resizeTextarea}
@@ -89,7 +117,7 @@
 			<div class="flex items-end">
 				<button
 					onclick={sendMessage}
-					class="w-fit rounded-3xl bg-slate-800 p-1 text-white"
+					class={`w-fit rounded-3xl ${awaitingResponse ? 'cursor-wait bg-slate-500' : 'bg-slate-800'} p-1 text-white`}
 					aria-label="Send message"
 				>
 					<svg
