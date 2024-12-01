@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { type Message } from '$lib';
-	import type OpenAI from 'openai';
 	import { onMount } from 'svelte';
+	import SvelteMarkdown from 'svelte-markdown';
 	import { fade } from 'svelte/transition';
 
 	let { data } = $props();
@@ -10,9 +10,23 @@
 
 	let textarea: HTMLTextAreaElement;
 
-	let messages: Message[] = $state([
-		{ role: 'assistant', content: [{ type: 'text', text: 'Hello! How can I help you?' }] }
-	]);
+	const initial_messages: Message[] = [
+		{
+			role: 'system',
+			content: [
+				{
+					type: 'text',
+					text: 'You are a helpful library assistant who helps people with finding a book in a database. The table is named "books" and has the columns "barcode", "call_number", "sublocation", "author", "subject", "title", "description", and "copies".'
+				}
+			]
+		},
+		{
+			role: 'assistant',
+			content: [{ type: 'text', text: 'Hello! What are you looking for in the library database?' }]
+		}
+	];
+
+	let messages: Message[] = $state(initial_messages);
 
 	let messageSent = false;
 
@@ -37,7 +51,7 @@
 		input = '';
 		textarea.style.height = `${initialHeight}px`;
 
-		const json: OpenAI.Chat.Completions.ChatCompletionMessage = await (
+		const json: Message[] = await (
 			await fetch('/api/sendMessage', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -47,13 +61,7 @@
 
 		messageSent = true;
 
-		messages = [
-			...messages,
-			{
-				role: 'assistant',
-				content: [{ type: 'text', text: json.content ?? 'No contents returned' }]
-			}
-		];
+		messages = [...messages, ...json];
 
 		localStorage.setItem('messages', JSON.stringify(messages));
 
@@ -66,36 +74,33 @@
 	}
 
 	function clearChat() {
-		messages = [
-			{ role: 'assistant', content: [{ type: 'text', text: 'Hello! How can I help you?' }] }
-		];
+		messages = initial_messages;
 		localStorage.removeItem('messages');
 	}
 </script>
 
-<h1>DestinyChat</h1>
-{data.count} books
-
 <main class="flex min-h-screen justify-center bg-slate-200">
-	<div class="m-2 flex flex-col gap-2 rounded p-2">
+	<div class="m-2 flex w-full max-w-2xl flex-col gap-2 rounded p-2">
 		<button onclick={clearChat} class="mx-auto w-fit underline">Clear chat</button>
-		{#each messages as message}
+		{#each messages.filter((message) => message.role === 'user' || message.role === 'assistant') as message}
 			<div class="flex" transition:fade>
-				{#each message.content as content}
-					{#if message.role === 'assistant'}
-						<div
-							class="w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-300 px-5 py-2"
-						>
-							{content.text}
-						</div>
-					{:else}
-						<div
-							class="ml-auto w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-800 px-5 py-2 text-right text-white"
-						>
-							{content.text}
-						</div>
-					{/if}
-				{/each}
+				{#if message?.content && message.content[0]}
+					{#each message.content as content}
+						{#if message.role === 'assistant'}
+							<div
+								class="w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-300 px-5 py-2"
+							>
+								<SvelteMarkdown source={content.text} />
+							</div>
+						{:else}
+							<div
+								class="ml-auto w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-800 px-5 py-2 text-right text-white"
+							>
+								{content.text}
+							</div>
+						{/if}
+					{/each}
+				{/if}
 			</div>
 		{/each}
 		<div class="flex w-full gap-2">
