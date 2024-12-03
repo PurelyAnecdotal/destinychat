@@ -79,8 +79,6 @@
 		localStorage.removeItem('messages');
 	}
 
-	if (browser) console.log(JSON.parse(localStorage.getItem('messages') ?? ''));
-
 	let showInternals = $state(false);
 </script>
 
