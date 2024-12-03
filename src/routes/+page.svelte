@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { type Message } from '$lib';
 	import { onMount } from 'svelte';
 	import SvelteMarkdown from 'svelte-markdown';
@@ -16,7 +17,7 @@
 			content: [
 				{
 					type: 'text',
-					text: 'You are a helpful library assistant who helps people with finding a book in a database. The table is named "books" and has the columns "barcode", "call_number", "sublocation", "author", "subject", "title", "description", and "copies".'
+					text: 'You are a helpful library assistant who helps people with finding a book in a database by making SQL queries. The table is named "books" and has the columns "barcode", "call_number", "sublocation", "author", "subject", "title", "description", and "copies".'
 				}
 			]
 		},
@@ -77,14 +78,23 @@
 		messages = initial_messages;
 		localStorage.removeItem('messages');
 	}
+
+	if (browser) console.log(JSON.parse(localStorage.getItem('messages') ?? ''));
+
+	let showInternals = $state(false);
 </script>
 
 <main class="flex min-h-screen justify-center bg-slate-200">
 	<div class="m-2 flex w-full max-w-2xl flex-col gap-2 rounded p-2">
+		<h1 class="my-2 text-3xl font-light tracking-tight">AVHS Library Book Search</h1>
 		<button onclick={clearChat} class="mx-auto w-fit underline">Clear chat</button>
-		{#each messages.filter((message) => message.role === 'user' || message.role === 'assistant') as message}
+		<label>
+			<input type="checkbox" bind:checked={showInternals} />
+			Show internals
+		</label>
+		{#each messages as message}
 			<div class="flex" transition:fade>
-				{#if message?.content && message.content[0]}
+				{#if (message.role === 'user' || message.role === 'assistant') && message.content}
 					{#each message.content as content}
 						{#if message.role === 'assistant'}
 							<div
@@ -100,6 +110,41 @@
 							</div>
 						{/if}
 					{/each}
+				{:else if showInternals}
+					{#if message.role === 'system'}
+						{#each message.content as content}
+							<div class="ml-auto">
+								<div class="ml-5 text-xs font-light italic">System prompt</div>
+								<div
+									class="w-fit max-w-lg overflow-hidden break-words rounded-3xl border-2 border-slate-300 px-5 py-2 font-mono text-xs"
+								>
+									{content.text}
+								</div>
+							</div>
+						{/each}
+					{:else if message.role === 'assistant' && 'tool_calls' in message}
+						{#each message.tool_calls as tool_call}
+							<div>
+								<span class="ml-5 text-xs font-light italic">Database query</span>
+								<div
+									class="w-fit max-w-lg overflow-hidden break-words rounded-3xl border-2 border-slate-300 px-5 py-2 font-mono text-xs"
+								>
+									{JSON.parse(tool_call.function.arguments).query}
+								</div>
+							</div>
+						{/each}
+					{:else if message.role === 'tool'}
+						{#each message.content as content}
+							<div class="ml-auto">
+								<div class="ml-5 text-xs font-light italic">Database response</div>
+								<div
+									class="w-fit max-w-lg overflow-hidden break-words rounded-3xl border-2 border-slate-300 px-5 py-2 font-mono text-xs"
+								>
+									{content.text}
+								</div>
+							</div>
+						{/each}
+					{/if}
 				{/if}
 			</div>
 		{/each}

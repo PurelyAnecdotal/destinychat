@@ -8,32 +8,63 @@ ATTACH 'src/lib/db/books.sqlite' AS backup;
 CREATE TABLE IF NOT EXISTS books AS SELECT * FROM backup.books;
 `);
 
-export type Message = UserMessage | SystemMessage | AssistantMessage | ToolCallMessage;
+export type Message =
+	| UserMessage
+	| SystemMessage
+	| AssistantMessage
+	| AssistantToolCallMessage
+	| ToolMessage;
 
 interface MessageContent {
 	type: 'text';
 	text: string;
 }
 
-export type UserMessage = {
+interface ToolCall {
+	type: string;
+	id: string;
+}
+
+export interface FunctionCall extends ToolCall {
+	type: 'function';
+	function: {
+		arguments: string;
+		name: string;
+	};
+}
+
+interface MessageBase {
+	role: string;
+	content: MessageContent[] | null;
+}
+
+export interface UserMessage extends MessageBase {
 	role: 'user';
 	content: MessageContent[];
-};
+}
 
-export type SystemMessage = {
+export interface SystemMessage extends MessageBase {
 	role: 'system';
 	content: MessageContent[];
-};
+}
 
-export type AssistantMessage = {
+interface AssistantMessageBase extends MessageBase {
 	role: 'assistant';
-	content: MessageContent[];
-};
+}
 
-export type ToolCallMessage = {
+export interface AssistantChatMessage extends AssistantMessageBase {
+	content: MessageContent[];
+}
+
+export interface AssistantToolCallMessage extends AssistantMessageBase {
+	content: null;
+	tool_calls: FunctionCall[];
+}
+
+export type AssistantMessage = AssistantChatMessage | AssistantToolCallMessage;
+
+export interface ToolMessage extends MessageBase {
 	role: 'tool';
-	content: MessageContent[];
 	tool_call_id: string;
-};
-
-// export type Message = OpenAI.Chat.Completions.ChatCompletionMessageParam;
+	content: MessageContent[];
+}

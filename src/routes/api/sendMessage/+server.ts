@@ -1,4 +1,10 @@
-import { db, type Message, type ToolCallMessage } from '$lib';
+import {
+	db,
+	type AssistantToolCallMessage,
+	type FunctionCall,
+	type Message,
+	type ToolMessage
+} from '$lib';
 import OpenAI from 'openai';
 
 const openai = new OpenAI();
@@ -46,9 +52,19 @@ async function completeChat(messages: Message[]): Promise<Message[]> {
 		response.choices[0].finish_reason === 'tool_calls' &&
 		response.choices[0].message.tool_calls
 	) {
-		const tool_call = response.choices[0].message.tool_calls[0];
+		const message: AssistantToolCallMessage = {
+			role: 'assistant',
+			content: null,
+			tool_calls: response.choices[0].message.tool_calls
+		};
 
-		if (tool_call.type !== 'function' || tool_call.function.name !== 'execute_sql') return [];
+		if (
+			message.tool_calls[0].type !== 'function' ||
+			message.tool_calls[0].function.name !== 'execute_sql'
+		)
+			return [];
+
+		const tool_call: FunctionCall = message.tool_calls[0];
 
 		const args = JSON.parse(tool_call.function.arguments);
 
@@ -66,21 +82,18 @@ async function completeChat(messages: Message[]): Promise<Message[]> {
 
 		console.log(`SQL query result: ${JSON.stringify(db_result)}`);
 
-		const new_messages: Message[] = [
-			response.choices[0].message,
-			{
-				role: 'tool',
-				content: [
-					{
-						type: 'text',
-						text: JSON.stringify(db_result)
-					}
-				],
-				tool_call_id: tool_call.id
-			}
-		];
+		const tool_message: ToolMessage = {
+			role: 'tool',
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify(db_result)
+				}
+			],
+			tool_call_id: tool_call.id
+		};
 
-		console.log(new_messages);
+		const new_messages: Message[] = [message, tool_message];
 
 		const final_response = await openai.chat.completions.create({
 			model,
