@@ -1,11 +1,8 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
 	import { type Message } from '$lib';
 	import { onMount } from 'svelte';
 	import SvelteMarkdown from 'svelte-markdown';
 	import { fade } from 'svelte/transition';
-
-	let { data } = $props();
 
 	let input = $state('');
 
@@ -17,7 +14,7 @@
 			content: [
 				{
 					type: 'text',
-					text: 'You are a helpful library assistant who helps people with finding a book in a database by making SQL queries. The table is named "books" and has the columns "barcode", "call_number", "sublocation", "author", "subject", "title", "description", and "copies".'
+					text: 'You are a helpful library assistant who helps people with finding a book in a database by making SQL queries. The table is named "books" and has the columns "barcode", "call_number", "sublocation", "author", "subject", "title", "description", and "copies". Make sure your queries do not return more than 20 results.'
 				}
 			]
 		},
