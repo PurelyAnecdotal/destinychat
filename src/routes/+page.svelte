@@ -1,82 +1,64 @@
-<script lang="ts">
-	import { type Message } from '$lib';
-	import { onMount } from 'svelte';
-	import SvelteMarkdown from 'svelte-markdown';
-	import { fade } from 'svelte/transition';
+<svelte:options runes={false} />
 
-	let input = $state('');
+<script lang="ts">
+	import { useChat } from '@ai-sdk/svelte';
+	import { type Message } from 'ai';
+	import { onMount } from 'svelte';
+	import { fade } from 'svelte/transition';
+	import MessageBubble from './MessageBubble.svelte';
 
 	let textarea: HTMLTextAreaElement;
 
-	const initial_messages: Message[] = [
+	let initialHeight: number;
+
+	let initialMessages: Message[] = [
 		{
 			role: 'system',
-			content: [
-				{
-					type: 'text',
-					text: 'You are a helpful library assistant who helps people with finding a book in a database by making SQL queries. The table is named "books" and has the columns "barcode", "call_number", "sublocation", "author", "subject", "title", "description", and "copies". Make sure your queries do not return more than 20 results.'
-				}
-			]
+			content:
+				'You are a helpful library assistant who helps people with finding a book in a database by making SQL queries. The table is named "books" and has the columns "barcode", "call_number", "sublocation" (often is blank), "author", "subject", "title", "description" (used to specify when books are divided into volumes, usually blank), and "copies" (the same book may have multiple entries but with a different copies number for each copy of the book). Make sure your queries do not return more than 20 results. Don\'t use ILIKE. Author field is of the format Last name, first name.',
+			id: 'system'
 		},
 		{
 			role: 'assistant',
-			content: [{ type: 'text', text: 'Hello! What are you looking for in the library database?' }]
+			content: 'Hello! What are you looking for in the library database?',
+			id: 'initial'
 		}
 	];
 
-	let messages: Message[] = $state(initial_messages);
-
-	let messageSent = false;
-
-	let initialHeight: number;
+	const { input, handleSubmit, messages, isLoading, setMessages } = useChat({
+		initialMessages,
+		maxSteps: 5
+	});
 
 	onMount(() => {
 		initialHeight = textarea.scrollHeight;
 
 		const storedMessages = localStorage.getItem('messages');
 
-		if (storedMessages) messages = JSON.parse(storedMessages);
+		if (storedMessages) setMessages(JSON.parse(storedMessages));
+
+		messages.subscribe((value) => {
+			console.log(value);
+			localStorage.setItem('messages', JSON.stringify(value));
+		});
 	});
-
-	let awaitingResponse = $state(false);
-
-	async function sendMessage() {
-		if (!input || awaitingResponse) return;
-
-		awaitingResponse = true;
-
-		messages = [...messages, { role: 'user', content: [{ type: 'text', text: input }] }];
-		input = '';
-		textarea.style.height = `${initialHeight}px`;
-
-		const json: Message[] = await (
-			await fetch('/api/sendMessage', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(messages)
-			})
-		).json();
-
-		messageSent = true;
-
-		messages = [...messages, ...json];
-
-		localStorage.setItem('messages', JSON.stringify(messages));
-
-		awaitingResponse = false;
-	}
 
 	function resizeTextarea() {
 		textarea.style.height = 'auto';
 		textarea.style.height = `${textarea.scrollHeight}px`;
 	}
 
+	let showInternals = false;
+
 	function clearChat() {
-		messages = initial_messages;
+		setMessages(initialMessages);
+
 		localStorage.removeItem('messages');
 	}
 
-	let showInternals = $state(false);
+	function isVisibleMessage(message: Message) {
+		return message.role !== 'system' && !(message.role === 'assistant' && message.toolInvocations);
+	}
 </script>
 
 <main class="flex min-h-screen justify-center bg-slate-200">
@@ -87,72 +69,25 @@
 			<input type="checkbox" bind:checked={showInternals} />
 			Show internals
 		</label>
-		{#each messages as message}
-			<div class="flex" transition:fade>
-				{#if (message.role === 'user' || message.role === 'assistant') && message.content}
-					{#each message.content as content}
-						{#if message.role === 'assistant'}
-							<div
-								class="w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-300 px-5 py-2"
-							>
-								<SvelteMarkdown source={content.text} />
-							</div>
-						{:else}
-							<div
-								class="ml-auto w-fit max-w-lg overflow-hidden break-words rounded-3xl bg-slate-800 px-5 py-2 text-right text-white"
-							>
-								{content.text}
-							</div>
-						{/if}
-					{/each}
-				{:else if showInternals}
-					{#if message.role === 'system'}
-						{#each message.content as content}
-							<div class="ml-auto">
-								<div class="ml-5 text-xs font-light italic">System prompt</div>
-								<div
-									class="w-fit max-w-lg overflow-hidden break-words rounded-3xl border-2 border-slate-300 px-5 py-2 font-mono text-xs"
-								>
-									{content.text}
-								</div>
-							</div>
-						{/each}
-					{:else if message.role === 'assistant' && 'tool_calls' in message}
-						{#each message.tool_calls as tool_call}
-							<div>
-								<span class="ml-5 text-xs font-light italic">Database query</span>
-								<div
-									class="w-fit max-w-lg overflow-hidden break-words rounded-3xl border-2 border-slate-300 px-5 py-2 font-mono text-xs"
-								>
-									{JSON.parse(tool_call.function.arguments).query}
-								</div>
-							</div>
-						{/each}
-					{:else if message.role === 'tool'}
-						{#each message.content as content}
-							<div class="ml-auto">
-								<div class="ml-5 text-xs font-light italic">Database response</div>
-								<div
-									class="w-fit max-w-lg overflow-hidden break-words rounded-3xl border-2 border-slate-300 px-5 py-2 font-mono text-xs"
-								>
-									{content.text}
-								</div>
-							</div>
-						{/each}
-					{/if}
+		<ol class="space-y-2">
+			{#each $messages as message}
+				{#if showInternals || isVisibleMessage(message)}
+					<li transition:fade={{ duration: 150 }}>
+						<MessageBubble {message} />
+					</li>
 				{/if}
-			</div>
-		{/each}
+			{/each}
+		</ol>
 		<div class="flex w-full gap-2">
 			<textarea
-				bind:value={input}
+				bind:value={$input}
 				bind:this={textarea}
 				onkeydown={(event) => {
 					if (event.key !== 'Enter') return;
 
 					event.preventDefault();
 
-					sendMessage();
+					handleSubmit();
 				}}
 				oninput={resizeTextarea}
 				class="bg-slate-1300 w-full resize-none rounded-3xl px-5 py-2"
@@ -161,8 +96,8 @@
 			></textarea>
 			<div class="flex items-end">
 				<button
-					onclick={sendMessage}
-					class={`w-fit rounded-3xl ${awaitingResponse ? 'cursor-wait bg-slate-500' : 'bg-slate-800'} p-1 text-white`}
+					onclick={handleSubmit}
+					class={`w-fit rounded-3xl ${$isLoading ? 'cursor-wait bg-slate-500' : 'bg-slate-800'} p-1 text-white`}
 					aria-label="Send message"
 				>
 					<svg
