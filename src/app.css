@@ -2,6 +2,7 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-li {
+hr {
 	margin-bottom: 1rem;
+	opacity: 0;
 }
